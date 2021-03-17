@@ -1,48 +1,48 @@
-library(testthat)
 context("test_reparameterize-retrain.R -- Learner reparameterization & retraining")
-
-library(sl3)
-library(origami)
 
 data(cpp_imputed)
 covars <- c("apgar1", "apgar5", "parity", "gagebrth", "mage", "meducyrs", "sexn")
 outcome <- "haz"
 task <- sl3_Task$new(data.table::copy(cpp_imputed), covariates = covars, outcome = outcome)
+glm_lrnr <- Lrnr_glm$new()
+original_fit <- glm_lrnr$train(task)
 
-glm_learner <- Lrnr_glm$new()
-new_params <- list(covariates = setdiff(covars, "sexn"))
-glm_sub <- glm_learner$reparameterize(new_params)
-
-full_fit <- glm_learner$train(task)
-sub_fit <- glm_sub$train(task)
 test_that("We can reparameterize an untrained model", {
-  expect_equal(setdiff(names(coef(full_fit)), names(coef(sub_fit))), "sexn")
+  new_params <- list(covariates = setdiff(covars, "sexn"))
+  reparam_lrnr_from_lrnr <- glm_lrnr$reparameterize(new_params)
+  reparam_fit_from_lrnr <- reparam_lrnr_from_lrnr$train(task)
+  expect_true(reparam_fit_from_lrnr$is_trained)
+  expect_equal(setdiff(names(coef(original_fit)), names(coef(reparam_fit_from_lrnr))), "sexn")
 })
 
-reparam_lrnr <- full_fit$reparameterize(new_params)
-reparam_fit <- reparam_lrnr$train(task)
 test_that("We can reparameterize a trained model and refit", {
-  expect_equal(setdiff(names(coef(full_fit)), names(coef(reparam_fit))), "sexn")
+  new_params <- list(covariates = setdiff(covars, "sexn"))
+  reparam_lrnr_from_fit <- original_fit$reparameterize(new_params)
+  reparam_fit_from_fit <- reparam_lrnr_from_fit$train(task)
+  expect_true(reparam_fit_from_fit$is_trained)
+  expect_equal(setdiff(names(coef(original_fit)), names(coef(reparam_fit_from_fit))), "sexn")
 })
 
-new_covars_task <- sl3_Task$new(data.table::copy(cpp_imputed),
-  covariates = covars[-7], outcome = outcome
-)
 test_that("We cannot retrain a model on a new task with train", {
-  expect_error(full_fit$train(new_covars_task))
+  new_covars_task <- sl3_Task$new(data.table::copy(cpp_imputed),
+    covariates = covars[-7], outcome = outcome
+  )
+  expect_error(original_fit$train(new_covars_task))
 })
 
-new_covars_task_fit <- full_fit$retrain(new_covars_task)
 test_that("We can retrain a model on a new task with new covariates", {
-  expect_equal(setdiff(names(coef(full_fit)), names(coef(new_covars_task_fit))), "sexn")
-  expect_equal(coef(reparam_fit), coef(new_covars_task_fit))
+  new_covars_task <- sl3_Task$new(data.table::copy(cpp_imputed),
+    covariates = covars[-7], outcome = outcome
+  )
+  retrained_fit <- original_fit$retrain(new_covars_task)
+  expect_true(retrained_fit$is_trained)
+  expect_equal(setdiff(names(coef(original_fit)), names(coef(retrained_fit))), "sexn")
 })
 
-new_outcome_type_task <- sl3_Task$new(data.table::copy(cpp_imputed),
-  covariates = covars[-7], outcome = "sexn"
-)
-new_outcome_type_task_fit <- full_fit$retrain(new_outcome_type_task)
 test_that("We can retrain a model on a new task with new covariates and outcome", {
-  expect_true(new_outcome_type_task_fit$is_trained)
-  expect_equal(new_outcome_type_task_fit$training_task$outcome_type$type, "binomial")
+  new_outcome_task <- sl3_Task$new(data.table::copy(cpp_imputed),
+    covariates = covars[-7], outcome = "sexn"
+  )
+  retrained_fit <- original_fit$retrain(new_outcome_task)
+  expect_equal(retrained_fit$training_task$outcome_type$type, "binomial")
 })
