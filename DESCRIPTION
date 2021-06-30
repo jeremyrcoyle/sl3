@@ -46,7 +46,9 @@ Imports:
     Rdpack,
     imputeMissings,
     dplyr,
-    caret
+    caret,
+    ROCR,
+    parallel
 Suggests:
     testthat,
     rmarkdown,

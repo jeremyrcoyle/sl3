@@ -1,6 +1,6 @@
 #' Nonlinear Optimization via Augmented Lagrange
 #'
-#' This meta-learner provides fitting procedures for any pairing of loss
+#' This meta-learner provides fitting procedures for any pairing of loss or risk
 #' function and metalearner function, subject to constraints. The optimization
 #' problem is solved by making use of \code{\link[Rsolnp]{solnp}}, using
 #' Lagrange multipliers. For further details, consult the documentation of the
@@ -26,15 +26,16 @@
 #'   \item{\code{learner_function=metalearner_linear}}{A function(alpha, X) that
 #'     takes a vector of covariates and a matrix of data and combines them into
 #'     a vector of predictions. See \link{metalearners} for options.}
-#'   \item{\code{loss_function=loss_squared_error}}{A function(pred, truth) that
-#'     takes prediction and truth vectors and returns a loss vector. See
-#'     \link{loss_functions} for options.}
+#'   \item{\code{eval_function=loss_squared_error}}{A function(pred, truth) that
+#'     takes prediction and truth vectors and returns a loss vector or a risk
+#'     scalar. See \link{loss_functions} and \link{risk_functions} for options
+#'     and more detail.}
 #'   \item{\code{make_sparse=TRUE}}{If TRUE, zeros out small alpha values.}
 #'   \item{\code{convex_combination=TRUE}}{If \code{TRUE}, constrain alpha to
 #'     sum to 1.}
 #'   \item{\code{init_0=FALSE}}{If TRUE, alpha is initialized to all 0's, useful
 #'     for TMLE. Otherwise, it is initialized to equal weights summing to 1,
-#'     useful for SuperLearner.}
+#'     useful for Super Learner.}
 #'   \item{\code{...}}{Not currently used.}
 #' }
 #'
@@ -46,23 +47,22 @@ Lrnr_solnp <- R6Class(
   class = TRUE,
   public = list(
     initialize = function(learner_function = metalearner_linear,
-                          loss_function = loss_squared_error,
+                          eval_function = loss_squared_error,
                           make_sparse = TRUE, convex_combination = TRUE,
-                          init_0 = FALSE, tol = 1e-5, ...) {
+                          init_0 = FALSE, ...) {
       params <- args_to_list()
       super$initialize(params = params, ...)
     }
   ),
   private = list(
     .properties = c(
-      "continuous", "binomial", "categorical", "weights",
-      "offset"
+      "continuous", "binomial", "categorical", "weights", "offset"
     ),
     .train = function(task) {
       verbose <- getOption("sl3.verbose")
       params <- self$params
       learner_function <- params$learner_function
-      loss_function <- params$loss_function
+      eval_function <- params$eval_function
       outcome_type <- self$get_outcome_type(task)
 
       # specify data
@@ -82,8 +82,14 @@ Lrnr_solnp <- R6Class(
         } else {
           preds <- learner_function(alphas, X)
         }
-        losses <- loss_function(preds, Y)
-        risk <- weighted.mean(losses, weights)
+        eval_result <- eval_function(preds, Y)
+
+        if (!is.null(attr(eval_result, "risk"))) {
+          risk <- eval_result
+        } else {
+          loss <- eval_result
+          risk <- weighted.mean(loss, weights)
+        }
         return(risk)
       }
       if (params$convex_combination) {
@@ -108,7 +114,7 @@ Lrnr_solnp <- R6Class(
         init_alphas, risk,
         eqfun = eq_fun, eqB = eqB,
         LB = LB,
-        control = list(trace = 0, tol = params$tol)
+        control = list(trace = 0)
       )
       coefs <- fit_object$pars
       names(coefs) <- colnames(task$X)
@@ -117,7 +123,10 @@ Lrnr_solnp <- R6Class(
         max_coef <- max(coefs)
         threshold <- max_coef / 1000
         coefs[coefs < threshold] <- 0
-        coefs <- coefs / sum(coefs)
+        if (params$convex_combination) {
+          # renormalize so coefficients sum to 1
+          coefs <- coefs / sum(coefs)
+        }
       }
       fit_object$coefficients <- coefs
       fit_object$training_offset <- task$has_node("offset")

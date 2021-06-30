@@ -51,6 +51,24 @@
   learners, even those without native `formula` support. The `formula` should 
   be an object of class "`formula`", or a character string that can be coerced 
   to that class.
+* Added factory function for performance-based risks for binary outcomes with 
+  `ROCR` performance measures `custom_ROCR_risk`. Supports cutoff-dependent and 
+  scalar `ROCR` performance measures. The risk is defined as 1 - performance, 
+  and is transformed back to the performance measure in `cv_risk` and 
+  `importance` functions. This change prompted the revision of argument name 
+  `loss_fun` and `loss_function` to `eval_fun` and `eval_function`, 
+  respectively, since the evaluation of predictions relative to the observations 
+  can be either a risk or a loss function. This argument name change impacted 
+  the following: `Lrnr_solnp`, `Lrnr_optim`, `Lrnr_cv_selector`, `cv_risk`, 
+  `importance`, and `CV_Lrnr_sl`. 
+* Incorporated stratified cross-validation when `folds` are not supplied to the 
+  `sl3_Task` and the outcome is a discrete variable. 
+* Added the following arguments and functionality to the `importance` method: 
+  (i) evaluation of importance over `covariate_groups`, by removing/permuting 
+  all covariates in the same group together; (ii) when `type = "permute"`, 
+  one can specify the number of permutations to average the permuted risk over, 
+  and these permutations can be parallelized; and (iii) when `type = "permute"`, 
+  the RNG seeds called before the permutation are returned for reproducibility.
 
 # sl3 1.4.2
 * Updates to variable importance functionality, including calculation of risk
